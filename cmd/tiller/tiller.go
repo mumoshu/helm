@@ -73,6 +73,7 @@ var (
 	enableTracing        = flag.Bool("trace", false, "enable rpc tracing")
 	store                = flag.String("storage", storageConfigMap, "storage driver to use. One of 'configmap', 'memory', or 'secret'")
 	remoteReleaseModules = flag.Bool("experimental-release", false, "enable experimental release modules")
+	rbacProxy            = flag.Bool("experimental-rbac-proxy", false, "enable experimental RBAC auth proxy to authn/authz the helm client")
 	tlsEnable            = flag.Bool("tls", tlsEnableEnvVarDefault(), "enable TLS")
 	tlsVerify            = flag.Bool("tls-verify", tlsVerifyEnvVarDefault(), "enable TLS and verify remote certificate")
 	keyFile              = flag.String("tls-key", tlsDefaultsFromEnv("tls-key"), "path to TLS private key file")
@@ -163,7 +164,11 @@ func start() {
 		}))
 	}
 
-	rootServer = tiller.NewServer(opts...)
+	f := &tiller.ServerOptsFactory{
+		AuthProxyEnabled: *rbacProxy,
+	}
+
+	rootServer = tiller.NewServer(f, opts...)
 
 	lstn, err := net.Listen("tcp", *grpcAddr)
 	if err != nil {

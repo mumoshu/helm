@@ -49,6 +49,12 @@ var (
 	tlsCertDefault   = "$HELM_HOME/cert.pem"
 	tlsKeyDefault    = "$HELM_HOME/key.pem"
 
+	// assumes two thins:
+	// 1. kube-rbac-proxy is installed as a sidecar of tiller and
+	//    we can reach to tiller only via kube-rbac-proxy
+	// 2. helm passes the bearer token specified in your kubeconfig to kube-rbac-proxy for delegating authn/authz
+	rbacProxyEnable bool
+
 	tillerTunnel *kube.Tunnel
 	settings     helm_env.EnvSettings
 )
@@ -289,6 +295,21 @@ func newClient() helm.Interface {
 		}
 		options = append(options, helm.WithTLS(tlscfg))
 	}
+
+	if rbacProxyEnable {
+		config, err := configForContext(settings.KubeContext)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(2)
+		}
+		if config.TLSClientConfig.KeyFile != "" {
+			fmt.Fprintln(os.Stderr, "You have specified a key file in your kubeconfig but TLS between helm and kube-rbac-proxy is not implemented yet")
+			os.Exit(1)
+		}
+		if config.BearerToken != "" {
+			options = append(options, helm.WithBearerToken(config.BearerToken))
+		}
+	}
 	return helm.NewClient(options...)
 }
 
@@ -302,5 +323,6 @@ func addFlagsTLS(cmd *cobra.Command) *cobra.Command {
 	cmd.Flags().StringVar(&tlsKeyFile, "tls-key", tlsKeyDefault, "path to TLS key file")
 	cmd.Flags().BoolVar(&tlsVerify, "tls-verify", false, "enable TLS for request and verify remote")
 	cmd.Flags().BoolVar(&tlsEnable, "tls", false, "enable TLS for request")
+	cmd.Flags().BoolVar(&rbacProxyEnable, "experimental-rbac-proxy", false, "enable authn/authz to Tiller with K8S RBAC using kube-rbac-proxy")
 	return cmd
 }

@@ -40,6 +40,10 @@ type options struct {
 	host string
 	// if set dry-run helm client calls
 	dryRun bool
+	// bearer token used to authenticate against kube-rbac-proxy in front of tiller
+	bearerToken string
+	// if set enable bearer token auth on helm client calls
+	useBearerToken bool
 	// if set enable TLS on helm client calls
 	useTLS bool
 	// if set, re-use an existing name
@@ -92,6 +96,14 @@ func WithTLS(cfg *tls.Config) Option {
 	return func(opts *options) {
 		opts.useTLS = true
 		opts.tlsConfig = cfg
+	}
+}
+
+// WithBearerToken specifics the bearer token used for authenticating helm client against kube-rbac-proxy in front of tiller
+func WithBearerToken(bearerToken string) Option {
+	return func(opts *options) {
+		opts.useBearerToken = true
+		opts.bearerToken = bearerToken
 	}
 }
 

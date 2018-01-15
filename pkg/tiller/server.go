@@ -33,21 +33,26 @@ import (
 // grpc library default is 4MB
 var maxMsgSize = 1024 * 1024 * 20
 
+// ServerOptsFactory creates a set of `grpc.ServerOption` to add validation, authn and authz to Tiller
+type ServerOptsFactory struct {
+	AuthProxyEnabled bool
+}
+
 // DefaultServerOpts returns the set of default grpc ServerOption's that Tiller requires.
-func DefaultServerOpts() []grpc.ServerOption {
+func (f ServerOptsFactory) DefaultServerOpts() []grpc.ServerOption {
 	return []grpc.ServerOption{
 		grpc.MaxMsgSize(maxMsgSize),
-		grpc.UnaryInterceptor(newUnaryInterceptor()),
-		grpc.StreamInterceptor(newStreamInterceptor()),
+		grpc.UnaryInterceptor(f.newUnaryInterceptor()),
+		grpc.StreamInterceptor(f.newStreamInterceptor()),
 	}
 }
 
 // NewServer creates a new grpc server.
-func NewServer(opts ...grpc.ServerOption) *grpc.Server {
-	return grpc.NewServer(append(DefaultServerOpts(), opts...)...)
+func NewServer(f *ServerOptsFactory, opts ...grpc.ServerOption) *grpc.Server {
+	return grpc.NewServer(append(f.DefaultServerOpts(), opts...)...)
 }
 
-func newUnaryInterceptor() grpc.UnaryServerInterceptor {
+func (f *ServerOptsFactory) newUnaryInterceptor() grpc.UnaryServerInterceptor {
 	return func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (resp interface{}, err error) {
 		if err := checkClientVersion(ctx); err != nil {
 			// whitelist GetVersion() from the version check
@@ -56,14 +61,21 @@ func newUnaryInterceptor() grpc.UnaryServerInterceptor {
 				return nil, err
 			}
 		}
+		if err := f.optionallyCheckAuthenticatedUser(ctx); err != nil {
+			return nil, err
+		}
 		return goprom.UnaryServerInterceptor(ctx, req, info, handler)
 	}
 }
 
-func newStreamInterceptor() grpc.StreamServerInterceptor {
+func (f *ServerOptsFactory) newStreamInterceptor() grpc.StreamServerInterceptor {
 	return func(srv interface{}, ss grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler) error {
-		if err := checkClientVersion(ss.Context()); err != nil {
+		ctx := ss.Context()
+		if err := checkClientVersion(ctx); err != nil {
 			log.Println(err)
+			return err
+		}
+		if err := f.optionallyCheckAuthenticatedUser(ctx); err != nil {
 			return err
 		}
 		return goprom.StreamServerInterceptor(srv, ss, info, handler)
@@ -90,6 +102,37 @@ func checkClientVersion(ctx context.Context) error {
 	clientVersion := versionFromContext(ctx)
 	if !version.IsCompatible(clientVersion, version.GetVersion()) {
 		return fmt.Errorf("incompatible versions client[%s] server[%s]", clientVersion, version.GetVersion())
+	}
+	return nil
+}
+
+func authenticatedUserFromContext(ctx context.Context) (string, []string) {
+	user := ""
+	groups := []string{}
+	if md, ok := metadata.FromIncomingContext(ctx); ok {
+		log.Printf("Request Metadata: %v", md)
+		if v, ok := md["x-forwarded-user"]; ok && len(v) > 0 {
+			user = v[0]
+		}
+		if v, ok := md["x-forwarded-groups"]; ok && len(v) > 0 {
+			groups = strings.Split(v[0], "|")
+		}
+	}
+	return user, groups
+}
+
+func checkAuthenticatedUser(ctx context.Context) error {
+	u, g := authenticatedUserFromContext(ctx)
+	if u == "" {
+		return fmt.Errorf("unauthorized access to tiller")
+	}
+	log.Printf("Authenticated as: user=%s, groups=%s", u, strings.Join(g, ","))
+	return nil
+}
+
+func (f *ServerOptsFactory) optionallyCheckAuthenticatedUser(ctx context.Context) error {
+	if f.AuthProxyEnabled {
+		return checkAuthenticatedUser(ctx)
 	}
 	return nil
 }

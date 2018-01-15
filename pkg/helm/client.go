@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"golang.org/x/net/context"
+	"golang.org/x/oauth2"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/keepalive"
@@ -296,6 +297,13 @@ func (h *Client) connect(ctx context.Context) (conn *grpc.ClientConn, err error)
 			Time: time.Duration(30) * time.Second,
 		}),
 	}
+	if h.opts.useBearerToken {
+		bearerTokenAccess := NewTokenAccess(&oauth2.Token{
+			TokenType:   "Bearer",
+			AccessToken: h.opts.bearerToken,
+		})
+		opts = append(opts, grpc.WithPerRPCCredentials(bearerTokenAccess))
+	}
 	switch {
 	case h.opts.useTLS:
 		opts = append(opts, grpc.WithTransportCredentials(credentials.NewTLS(h.opts.tlsConfig)))
@@ -306,6 +314,26 @@ func (h *Client) connect(ctx context.Context) (conn *grpc.ClientConn, err error)
 		return nil, err
 	}
 	return conn, nil
+}
+
+// oauthAccess supplies PerRPCCredentials from a given token.
+type tokenAccess struct {
+	token oauth2.Token
+}
+
+// NewOauthAccess constructs the PerRPCCredentials using a given token.
+func NewTokenAccess(token *oauth2.Token) credentials.PerRPCCredentials {
+	return tokenAccess{token: *token}
+}
+
+func (oa tokenAccess) GetRequestMetadata(ctx context.Context, uri ...string) (map[string]string, error) {
+	return map[string]string{
+		"authorization": oa.token.Type() + " " + oa.token.AccessToken,
+	}, nil
+}
+
+func (oa tokenAccess) RequireTransportSecurity() bool {
+	return false
 }
 
 // Executes tiller.ListReleases RPC.
