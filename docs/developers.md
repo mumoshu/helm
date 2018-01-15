@@ -82,6 +82,16 @@ To build Docker images, use `make docker-build`.
 Pre-build images are already available in the official Kubernetes Helm
 GCR registry.
 
+### Custom tagging
+
+The resulting docker image is tagged `gcr.io/kubernets-helm/tiller:canary` by default.
+
+If you want to push it to your own docker repository, set `DOCKER_REGISTRY` and `IMAGE_PREFIX`.
+
+For DockerHub, run `DOCKER_REGISTRY= IMAGE_PREFIX=your-prefix make docker-build` to tag it with `your-registry/your-prefix:canary`.
+
+For other docker registries, run `DOCKER_REGISTRY=your-registry IMAGE_PREFIX=your-prefix make docker-build` to tag it with `your-registry/your-prefix:canary`. 
+
 ## Running a Local Cluster
 
 For development, we highly recommend using the
