@@ -83,11 +83,12 @@ type ReleaseServer struct {
 	ReleaseModule
 	env       *environment.Environment
 	clientset internalclientset.Interface
+	impersonate bool
 	Log       func(string, ...interface{})
 }
 
 // NewReleaseServer creates a new release server.
-func NewReleaseServer(env *environment.Environment, clientset internalclientset.Interface, useRemote bool) *ReleaseServer {
+func NewReleaseServer(env *environment.Environment, clientset internalclientset.Interface, useRemote bool, impersonate bool) *ReleaseServer {
 	var releaseModule ReleaseModule
 	if useRemote {
 		releaseModule = &RemoteReleaseModule{}
@@ -102,6 +103,7 @@ func NewReleaseServer(env *environment.Environment, clientset internalclientset.
 		clientset:     clientset,
 		ReleaseModule: releaseModule,
 		Log:           func(_ string, _ ...interface{}) {},
+		impersonate:   impersonate,
 	}
 }
 

@@ -74,6 +74,7 @@ var (
 	store                = flag.String("storage", storageConfigMap, "storage driver to use. One of 'configmap', 'memory', or 'secret'")
 	remoteReleaseModules = flag.Bool("experimental-release", false, "enable experimental release modules")
 	rbacProxy            = flag.Bool("experimental-rbac-proxy", false, "enable experimental RBAC auth proxy to authn/authz the helm client")
+	impersonateUser      = flag.Bool("experimental-impersonate-user", false, "tiller impersonate the authenticated user when calling k8s API. requires RBAC auth to be enabled")
 	tlsEnable            = flag.Bool("tls", tlsEnableEnvVarDefault(), "enable TLS")
 	tlsVerify            = flag.Bool("tls-verify", tlsVerifyEnvVarDefault(), "enable TLS and verify remote certificate")
 	keyFile              = flag.String("tls-key", tlsDefaultsFromEnv("tls-key"), "path to TLS private key file")
@@ -114,7 +115,8 @@ func main() {
 
 func start() {
 
-	clientset, err := kube.New(nil).ClientSet()
+	client := kube.New(nil)
+	clientset, err := client.ClientSet()
 	if err != nil {
 		logger.Fatalf("Cannot initialize Kubernetes connection: %s", err)
 	}
@@ -188,7 +190,7 @@ func start() {
 	srvErrCh := make(chan error)
 	probeErrCh := make(chan error)
 	go func() {
-		svc := tiller.NewReleaseServer(env, clientset, *remoteReleaseModules)
+		svc := tiller.NewReleaseServer(env, clientset, *remoteReleaseModules, *impersonateUser)
 		svc.Log = newLogger("tiller").Printf
 		services.RegisterReleaseServiceServer(rootServer, svc)
 		if err := rootServer.Serve(lstn); err != nil {
