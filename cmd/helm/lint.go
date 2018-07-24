@@ -25,13 +25,11 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/ghodss/yaml"
 	"github.com/spf13/cobra"
 
 	"k8s.io/helm/pkg/chartutil"
 	"k8s.io/helm/pkg/lint"
 	"k8s.io/helm/pkg/lint/support"
-	"k8s.io/helm/pkg/strvals"
 )
 
 var longLintHelp = `
@@ -47,10 +45,15 @@ type lintCmd struct {
 	valueFiles valueFiles
 	values     []string
 	sValues    []string
+	fValues    []string
 	namespace  string
 	strict     bool
 	paths      []string
 	out        io.Writer
+
+	certFile string
+	keyFile  string
+	caFile   string
 }
 
 func newLintCmd(out io.Writer) *cobra.Command {
@@ -73,8 +76,11 @@ func newLintCmd(out io.Writer) *cobra.Command {
 	cmd.Flags().VarP(&l.valueFiles, "values", "f", "specify values in a YAML file (can specify multiple)")
 	cmd.Flags().StringArrayVar(&l.values, "set", []string{}, "set values on the command line (can specify multiple or separate values with commas: key1=val1,key2=val2)")
 	cmd.Flags().StringArrayVar(&l.sValues, "set-string", []string{}, "set STRING values on the command line (can specify multiple or separate values with commas: key1=val1,key2=val2)")
-	cmd.Flags().StringVar(&l.namespace, "namespace", "default", "namespace to put the release into")
+	cmd.Flags().StringArrayVar(&l.fValues, "set-file", []string{}, "set values from respective files specified via the command line (can specify multiple or separate values with commas: key1=path1,key2=path2)")
 	cmd.Flags().BoolVar(&l.strict, "strict", false, "fail on lint warnings")
+	cmd.Flags().StringVar(&l.certFile, "cert-file", "", "identify HTTPS client using this SSL certificate file")
+	cmd.Flags().StringVar(&l.keyFile, "key-file", "", "identify HTTPS client using this SSL key file")
+	cmd.Flags().StringVar(&l.caFile, "ca-file", "", "verify certificates of HTTPS-enabled servers using this CA bundle")
 
 	return cmd
 }
@@ -90,7 +96,7 @@ func (l *lintCmd) run() error {
 	}
 
 	// Get the raw values
-	rvals, err := l.vals()
+	rvals, err := vals(l.valueFiles, l.values, l.sValues, l.fValues, l.certFile, l.keyFile, l.caFile)
 	if err != nil {
 		return err
 	}
@@ -170,39 +176,4 @@ func lintChart(path string, vals []byte, namespace string, strict bool) (support
 	}
 
 	return lint.All(chartPath, vals, namespace, strict), nil
-}
-
-func (l *lintCmd) vals() ([]byte, error) {
-	base := map[string]interface{}{}
-
-	// User specified a values files via -f/--values
-	for _, filePath := range l.valueFiles {
-		currentMap := map[string]interface{}{}
-		bytes, err := ioutil.ReadFile(filePath)
-		if err != nil {
-			return []byte{}, err
-		}
-
-		if err := yaml.Unmarshal(bytes, &currentMap); err != nil {
-			return []byte{}, fmt.Errorf("failed to parse %s: %s", filePath, err)
-		}
-		// Merge with the previous map
-		base = mergeValues(base, currentMap)
-	}
-
-	// User specified a value via --set
-	for _, value := range l.values {
-		if err := strvals.ParseInto(value, base); err != nil {
-			return []byte{}, fmt.Errorf("failed parsing --set data: %s", err)
-		}
-	}
-
-	// User specified a value via --set-string
-	for _, value := range l.sValues {
-		if err := strvals.ParseIntoString(value, base); err != nil {
-			return []byte{}, fmt.Errorf("failed parsing --set-string data: %s", err)
-		}
-	}
-
-	return yaml.Marshal(base)
 }
