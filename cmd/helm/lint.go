@@ -187,13 +187,7 @@ func (l *lintCmd) vals() ([]byte, error) {
 	for _, filePath := range l.valueFiles {
 		currentMap := map[string]interface{}{}
 
-		var bytes []byte
-		var err error
-		if strings.TrimSpace(filePath) == "-" {
-			bytes, err = ioutil.ReadAll(os.Stdin)
-		} else {
-			bytes, err = ioutil.ReadFile(filePath)
-		}
+		bytes, err := ioutil.ReadFile(filePath)
 
 		if err != nil {
 			return []byte{}, err
