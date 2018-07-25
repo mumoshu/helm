@@ -50,10 +50,6 @@ type lintCmd struct {
 	strict     bool
 	paths      []string
 	out        io.Writer
-
-	certFile string
-	keyFile  string
-	caFile   string
 }
 
 func newLintCmd(out io.Writer) *cobra.Command {
@@ -77,10 +73,8 @@ func newLintCmd(out io.Writer) *cobra.Command {
 	cmd.Flags().StringArrayVar(&l.values, "set", []string{}, "set values on the command line (can specify multiple or separate values with commas: key1=val1,key2=val2)")
 	cmd.Flags().StringArrayVar(&l.sValues, "set-string", []string{}, "set STRING values on the command line (can specify multiple or separate values with commas: key1=val1,key2=val2)")
 	cmd.Flags().StringArrayVar(&l.fValues, "set-file", []string{}, "set values from respective files specified via the command line (can specify multiple or separate values with commas: key1=path1,key2=path2)")
+	cmd.Flags().StringVar(&l.namespace, "namespace", "default", "namespace to put the release into")
 	cmd.Flags().BoolVar(&l.strict, "strict", false, "fail on lint warnings")
-	cmd.Flags().StringVar(&l.certFile, "cert-file", "", "identify HTTPS client using this SSL certificate file")
-	cmd.Flags().StringVar(&l.keyFile, "key-file", "", "identify HTTPS client using this SSL key file")
-	cmd.Flags().StringVar(&l.caFile, "ca-file", "", "verify certificates of HTTPS-enabled servers using this CA bundle")
 
 	return cmd
 }
@@ -96,7 +90,10 @@ func (l *lintCmd) run() error {
 	}
 
 	// Get the raw values
-	rvals, err := vals(l.valueFiles, l.values, l.sValues, l.fValues, l.certFile, l.keyFile, l.caFile)
+	//
+	// We omit the last three args of tls opts.
+	// That's because this command, `lint`, is explicitly forbidden from making server connections.
+	rvals, err := vals(l.valueFiles, l.values, l.sValues, l.fValues, "", "", "")
 	if err != nil {
 		return err
 	}
